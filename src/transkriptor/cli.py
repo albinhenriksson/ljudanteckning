@@ -7,8 +7,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
-from transkriptor.chunking import ChunkSpec, split_to_chunks
-
+from .chunking import ChunkSpec, split_to_chunks
 from .config import apply_overrides, load_settings
 from .logging_setup import setup_logging
 from .media import discover_media
