@@ -9,6 +9,8 @@ from rich.panel import Panel
 
 from .config import apply_overrides, load_settings
 from .logging_setup import setup_logging
+from .media import discover_media
+from .probe import ffprobe_info
 from .utils import (
     TranskriptorError,
     detect_gpu_ids,
@@ -148,7 +150,30 @@ def run(
         )
         log.info("Cleanup: %s", settings.cleanup)
 
-        log.info("Status: skeleton OK. Next milestone is file discovery + ffprobe validation.")
+        media = discover_media(p, settings.exclude)
+        if not media:
+            raise TranskriptorError("No media files found (after filtering).")
+
+        log.info("Discovered media files: %d", len(media))
+
+        # Probe (ffprobe) to validate inputs and get durations.
+        bad = 0
+        total_dur = 0.0
+        for m in media:
+            info = ffprobe_info(m.path)
+            if not info.has_audio or info.duration_s <= 0:
+                bad += 1
+                continue
+            total_dur += info.duration_s
+
+        if bad:
+            log.warning("Skipped %d files (no audio stream or zero duration).", bad)
+
+        log.info("Total duration (valid media): %.1f minutes", total_dur / 60.0)
+
+        log.info(
+            "Status: discovery + ffprobe OK. Next milestone is chunking + multi-GPU transcription."
+        )
 
     except TranskriptorError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
