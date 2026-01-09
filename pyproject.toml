@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transkriptor"
+version = "0.1.0"
+description = "Modern CLI for GPU-parallel transcription and subtitle generation; make your media library searchable."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Albin Henriksson" }]
+dependencies = [
+  "rich>=13.7.0",
+  "typer>=0.12.0",
+  "platformdirs>=4.0.0",
+  "faster-whisper>=1.0.0",
+]
+
+[project.optional-dependencies]
+nvml = ["nvidia-ml-py3>=7.352.0"]
+dev = [
+  "ruff>=0.6.0",
+  "pytest>=8.0.0",
+  "pytest-cov>=5.0.0",
+  "mypy>=1.10.0",
+  "pre-commit>=3.7.0",
+]
+
+[project.scripts]
+transkriptor = "transkriptor.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
