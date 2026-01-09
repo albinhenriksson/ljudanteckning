@@ -120,6 +120,10 @@ OPT_RETRANSCRIBE = typer.Option(
     False, "--retranscribe", help="Redo chunk transcriptions even if JSON exists."
 )
 
+OPT_TELEMETRY = typer.Option(
+    True, "--telemetry/--no-telemetry", help="Show GPU telemetry (NVML) during transcription."
+)
+
 
 def _parse_csv_ids(s: str) -> list[str]:
     ids = [x.strip() for x in s.split(",") if x.strip()]
@@ -152,6 +156,7 @@ def run(
     cleanup: str | None = OPT_CLEANUP,
     resplit: bool = OPT_RESPLIT,
     retranscribe: bool = OPT_RETRANSCRIBE,
+    telemetry: bool = OPT_TELEMETRY,
 ) -> None:
     """
     Run a transcription job.
@@ -304,7 +309,9 @@ def run(
                 compute_type=settings.compute_type,
                 vad=settings.vad,
                 beam_size=settings.beam_size,
+                telemetry=telemetry,
             )
+
             log.info("Transcription stage: OK")
         else:
             log.info("Transcription stage: nothing to do (all chunk JSON exists)")
@@ -365,8 +372,6 @@ def run(
             log.info("Chunks: %s -> %d", m.path.name, len(chunks))
 
         log.info("Total chunks created/reused: %d", chunk_total)
-
-        log.info("Status: chunking OK. Next milestone is multi-GPU transcription.")
 
     except TranskriptorError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")

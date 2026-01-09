@@ -7,9 +7,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from multiprocessing import Queue, get_context
 from pathlib import Path
+from time import monotonic
 
+from rich.console import Group
+from rich.live import Live
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn
+from rich.table import Table
 
+from .telemetry import get_gpu_stats, nvml_available
 from .utils import TranskriptorError
 
 
@@ -104,6 +109,9 @@ def transcribe_tasks(
     compute_type: str | None,
     vad: bool,
     beam_size: int,
+    *,
+    telemetry: bool = True,
+    telemetry_interval_s: float = 0.75,
 ) -> None:
     tasks_list = list(tasks)
     if not tasks_list:
@@ -149,35 +157,85 @@ def transcribe_tasks(
     failed = 0
     fatal: str | None = None
 
-    with Progress(
+    total = len(tasks_list)
+    done = 0
+    failed = 0
+    fatal: str | None = None
+
+    want_telemetry = telemetry and nvml_available() and bool(gpu_ids)
+
+    def build_gpu_table() -> Table:
+        t = Table(title="GPU telemetry", expand=True)
+        t.add_column("GPU", justify="right", no_wrap=True)
+        t.add_column("Name", overflow="fold")
+        t.add_column("Util", justify="right")
+        t.add_column("VRAM", justify="right")
+        t.add_column("Temp", justify="right")
+        t.add_column("Power", justify="right")
+
+        for s in get_gpu_stats(gpu_ids):
+            util = f"{s.util_pct}%" if s.util_pct is not None else "-"
+            vram = (
+                f"{s.mem_used_mb}/{s.mem_total_mb} MB"
+                if (s.mem_used_mb is not None and s.mem_total_mb is not None)
+                else "-"
+            )
+            temp = f"{s.temp_c}°C" if s.temp_c is not None else "-"
+            power = (
+                f"{s.power_w}/{s.power_limit_w} W"
+                if (s.power_w is not None and s.power_limit_w is not None)
+                else "-"
+            )
+            t.add_row(s.gpu_id, s.name, util, vram, temp, power)
+
+        return t
+
+    progress = Progress(
         TextColumn("[bold]transcribing[/bold]"),
         BarColumn(),
         TaskProgressColumn(),
         TimeElapsedColumn(),
         TextColumn("{task.fields[detail]}", justify="left"),
-        transient=True,
-    ) as progress:
-        task = progress.add_task("transcribe", total=total, detail="")
+        expand=True,
+    )
+    prog_task = progress.add_task("transcribe", total=total, detail="")
 
+    last_tel = 0.0
+    last_detail = ""
+
+    def render() -> Group:
+        if want_telemetry:
+            return Group(progress, build_gpu_table())
+        return Group(progress)
+
+    with Live(render(), refresh_per_second=6, transient=True) as live:
         while done + failed < total and fatal is None:
+            now = monotonic()
+
+            # Update telemetry periodically even if no queue events arrive
+            if want_telemetry and (now - last_tel) >= telemetry_interval_s:
+                last_tel = now
+                live.update(render())
+
             try:
-                kind, payload = result_q.get(timeout=1.0)
+                kind, payload = result_q.get(timeout=0.25)
             except queue.Empty:
                 continue
 
             if kind == "info":
-                progress.update(task, detail=f"[dim]{payload}[/dim]")
+                last_detail = str(payload)
+                progress.update(prog_task, detail=f"[dim]{last_detail}[/dim]")
             elif kind == "done":
                 done += 1
-                progress.update(task, advance=1)
+                progress.update(prog_task, advance=1)
             elif kind == "fail":
                 failed += 1
-                progress.update(task, advance=1, detail=f"[red]{payload}[/red]")
+                progress.update(prog_task, advance=1, detail=f"[red]{payload}[/red]")
             elif kind == "fatal":
-                fatal = payload
-            else:
-                # unknown message
-                continue
+                fatal = str(payload)
+
+            # Force redraw after important events
+            live.update(render())
 
     # Ensure workers are stopped
     for p in procs:
