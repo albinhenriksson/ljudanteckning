@@ -43,6 +43,22 @@ nvidia-smi
 ```
 If that command works and your GPUs show up, you’re ready to run GPU-accelerated transcription.
 
+## Screenshots
+
+### Multi-GPU transcription + live telemetry
+<img src="docs/screenshots/02-transcribing.png" width="900" alt="Transkriptor transcribing chunks across multiple NVIDIA GPUs with live telemetry." />
+
+<details>
+  <summary>More screenshots</summary>
+
+  <p><strong>Chunking stage</strong></p>
+  <img src="docs/screenshots/01-chunking.png" width="900" alt="Transkriptor chunking audio using FFmpeg." />
+
+  <p><strong>Finished outputs</strong></p>
+  <img src="docs/screenshots/03-finished.png" width="900" alt="Transkriptor finished run showing exported subtitles and transcript files next to media." />
+</details>
+
+
 ## Install (developer setup)
 
 ### Arch Linux (fish)
