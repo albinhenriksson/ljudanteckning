@@ -7,6 +7,8 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+from transkriptor.chunking import ChunkSpec, split_to_chunks
+
 from .config import apply_overrides, load_settings
 from .logging_setup import setup_logging
 from .media import discover_media
@@ -95,6 +97,10 @@ OPT_WRITE_TXT = typer.Option(None, "--write-txt/--no-txt", help="Write TXT outpu
 
 OPT_CLEANUP = typer.Option(None, "--cleanup", help="Cleanup policy: none|json|all.")
 
+OPT_RESPLIT = typer.Option(
+    False, "--resplit", help="Recreate WAV chunks even if they already exist."
+)
+
 
 def _parse_csv_ids(s: str) -> list[str]:
     ids = [x.strip() for x in s.split(",") if x.strip()]
@@ -125,6 +131,7 @@ def run(
     write_json: bool | None = OPT_WRITE_JSON,
     write_txt: bool | None = OPT_WRITE_TXT,
     cleanup: str | None = OPT_CLEANUP,
+    resplit: bool = OPT_RESPLIT,
 ) -> None:
     """
     Run a transcription job.
@@ -220,10 +227,41 @@ def run(
 
         log.info("Valid media files: %d", valid)
         log.info("Total duration (valid): %.1f minutes", total_dur / 60.0)
+        # Chunking stage
+        spec = ChunkSpec(
+            chunk_seconds=settings.chunk_seconds,
+            sample_rate=settings.sample_rate,
+            channels=settings.channels,
+        )
 
         log.info(
-            "Status: discovery + ffprobe OK. Next milestone is chunking + multi-GPU transcription."
+            "Chunking stage: %ds chunks @ %d Hz, %d ch",
+            spec.chunk_seconds,
+            spec.sample_rate,
+            spec.channels,
         )
+
+        # Re-probe each valid file to get per-file duration for progress bars
+        # (we can optimize this later by caching probe results in memory)
+        chunk_total = 0
+        for m in media:
+            info = ffprobe_info(m.path)
+            if not info.ok or not info.has_audio or info.duration_s <= 0:
+                continue
+
+            chunks = split_to_chunks(
+                media_path=m.path,
+                workdir_name=settings.workdir_name,
+                spec=spec,
+                duration_s=info.duration_s,
+                force=resplit,
+            )
+            chunk_total += len(chunks)
+            log.info("Chunks: %s -> %d", m.path.name, len(chunks))
+
+        log.info("Total chunks created/reused: %d", chunk_total)
+
+        log.info("Status: chunking OK. Next milestone is multi-GPU transcription.")
 
     except TranskriptorError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
