@@ -4,7 +4,7 @@ Make your media library searchable: scan folders, split audio, transcribe in par
 
 ## Screenshots
 
-Here’s what a real run looks like on a multi-GPU box: chunking with FFmpeg, parallel transcription workers, and live GPU telemetry.
+Here’s what a real run looks like on a multi-GPU box: chunking with FFmpeg, parallel transcription workers, and live GPU telemetry ("transkriptor" was the work-in-progress name of the project).
 
 <img src="docs/screenshots/02-transcribing.png" width="900" alt="Ljudanteckning transcribing chunks across multiple NVIDIA GPUs with live telemetry." />
 
